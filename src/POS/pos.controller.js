@@ -1,4 +1,4 @@
-import * as posService from "../../services/pos.service.js";
+import * as posService from "./pos.service.js";
 
 export const procesarVentaPOS = async (req, res) => {
     try {

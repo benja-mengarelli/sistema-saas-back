@@ -1,9 +1,9 @@
 import { Router } from "express";
-import productsRouter from "./api/products.routes.js";
-import userRouter from "./api/user.routes.js";
-import loginRouter from "./api/login.routes.js";
-import posRouter from "./api/pos.routes.js";
-import operadorRouter from "./operador/operador.routes.js";
+import productsRouter from "../Productos/products.routes.js";
+import userRouter from "../User/user.routes.js";
+import loginRouter from "../Login/login.routes.js";
+import posRouter from "../POS/pos.routes.js";
+import operadorRouter from "../operador/operador.routes.js";
 
 const router = Router();
 

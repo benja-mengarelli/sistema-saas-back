@@ -1,4 +1,4 @@
-import { generarToken } from '../../utils/jwt.js';
+import { generarToken } from '../utils/jwt.js';
 
 export const login = async (req, res) => {
     const token = generarToken({

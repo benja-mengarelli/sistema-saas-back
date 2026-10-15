@@ -1,15 +1,12 @@
 import mongoose from "mongoose";
 import CuentaCorriente from "../CtaCorriente/CuentaCorrienteModel.js";
-import Venta from "../models/venta.model.js";
+import Venta from "../Ventas/ventaModel.js";
 import { construirLineasVenta, validarPagos, crearDocumentoVenta, marcarVentaAnulada } from "../Ventas/venta.service.js";
 import { descontarStockVenta, reponerStockVenta } from "../Productos/product.service.js";
-import { aplicarFacturacion, revertirFacturacion } from "./facturacionCaja.service.js";
+import { aplicarFacturacion, revertirFacturacion } from "../helper/facturacionCaja.service.js";
 import { obtenerCajaAbierta } from "../Caja/caja.service.js";
-import { cuentaCorrienteService } from "../CtaCorriente/cuentaCorriente.service.js";
-import { cajaService } from "../Caja/caja.service.js";
-import { cerrarVentasDelDia } from "../MovStock/movimientoStock.service.js";
 import { construirLineasCompra, validarProductosCompra, crearDocumentoCompra, actualizarPrecioCompra } from "../Compras/compra.service.js";
-import { registrarCompra} from "../MovStock/movimientoStock.service.js";
+import { registrarCompra, cerrarVentasDelDia} from "../MovStock/movimientoStock.service.js";
 
 async function conTransaccion(fn) {
     const session = await mongoose.startSession();

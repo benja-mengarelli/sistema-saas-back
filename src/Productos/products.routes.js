@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { getProducts, getProductById, createProduct, updateProduct, deleteProduct, filterProducts } from "./product.controller.js";
 import { requireAuth, requireRole, requireEmpresa } from '../middlewares/auth.js';
-import passport from '../../config/passport.config.js';
 
 const router = Router();
 
@@ -18,13 +17,6 @@ router.get(
     requireEmpresa, 
     getProductById
 );
-
-//! filtrar en front
-/* router.get(
-    '/filter', 
-    passport.authenticate('jwt', { session: false }), 
-    filterProducts
-); */
 
 router.post(
     '/:empresaId', 

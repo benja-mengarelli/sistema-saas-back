@@ -26,11 +26,11 @@ async function aplicarIncrementos(cajaId, inc, session) {
     await Caja.updateOne({ _id: cajaId }, { $inc: inc }, { session });
 }
 
-async function aplicarFacturacion({ cajaId, pagos, lineas }, session) {
+export async function aplicarFacturacion({ cajaId, pagos, lineas }, session) {
     await aplicarIncrementos(cajaId, { ...incFromPagos(pagos), ...incFromLineas(lineas) }, session);
 }
 
-async function revertirFacturacion({ cajaId, pagos, lineas }, session) {
+export async function revertirFacturacion({ cajaId, pagos, lineas }, session) {
     const inc = { ...incFromPagos(pagos), ...incFromLineas(lineas) };
     const invertido = Object.fromEntries(Object.entries(inc).map(([k, v]) => [k, -v]));
     await aplicarIncrementos(cajaId, invertido, session);

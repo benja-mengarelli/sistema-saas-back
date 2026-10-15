@@ -108,7 +108,7 @@ export async function registrarAjuste ({ empresaId, conteos, origen }, session) 
 }
 
 /*! CIERRE DE CAJA */ 
-async function cerrarVentasDelDia({ empresaId, cajaId }, session) {
+export async function cerrarVentasDelDia({ empresaId, cajaId }, session) {
     const ventas = await Venta.find({
         empresaId,
         cajaId,

@@ -22,30 +22,37 @@ export const requireAuth = async(req, res, next) => {
 };
 
 export const requireEmpresa = () => {
-    return (req, res, next) => {
-        const empresaRef = db
-        .collection('empresas')
-        .doc(req.params.empresaId)
-        .get()
-        .then((doc) => {
-            if (!doc.exists) {
+    return async (req, res, next) => {
+        try {
+            const { empresaId } = req.params;
+            const empresaRef = db.collection('empresas').doc(empresaId);
+
+            const [empresaDoc, miembroDoc] = await Promise.all([
+                empresaRef.get(),
+                empresaRef.collection('miembros').doc(req.user.uid).get(),
+            ]);
+
+            if (!empresaDoc.exists) {
                 return res.status(404).json({ message: 'Empresa no encontrada' });
             }
-            const miembro = doc.data().miembros.find((m) => m.uid === req.user.uid);
-            if (!miembro) {
+            if (!miembroDoc.exists) {
                 return res.status(403).json({ message: 'Acceso denegado' });
             }
 
-            req.miembro = miembro;;
+            const miembro = { uid: miembroDoc.id, ...miembroDoc.data() };
+
+            if (miembro.activo === false) {
+                return res.status(403).json({ message: 'Acceso denegado' });
+            }
+
+            req.miembro = miembro;
             next();
-        }
-        ).catch((error) => {
+        } catch (error) {
             console.error('Error al verificar empresa:', error);
             return res.status(500).json({ message: 'Error del servidor' });
-        });
+        }
     };
 };
-        
 
 export const requireRole = (roles) => {
     return (req, res, next) => {

@@ -1,5 +1,5 @@
 import Product from './productModel.js';
-import { explotarItems } from './productoHelper.js';
+import { explotarItems } from '../helper/explotarProductos.js';
 
 export const getProducts = async (empresaId) => {
     try {

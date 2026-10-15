@@ -1,6 +1,6 @@
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { db } from "../firebase.js";
+import { db } from "../config/firebase.config.js";
 
 const JWT_SECRET = process.env.JWT_OPERADOR_SECRET;
 const JWT_EXPIRA_SEGUNDOS = Number(process.env.JWT_OPERADOR_EXPIRA_SEGUNDOS) || 300; // 5 minutos

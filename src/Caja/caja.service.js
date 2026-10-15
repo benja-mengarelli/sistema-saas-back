@@ -1,5 +1,4 @@
 import Caja from "./cajaModel.js";
-import { construirIncrementos } from "../helper/facturacionCaja.service.js";
 
 export const getCajas = async (empresaId) => {
     try {

@@ -2,7 +2,6 @@ import express from 'express';
 import mongoose from 'mongoose';
 import cookieParser from 'cookie-parser';
 import apiRoutes from './routes/index.js';
-import passport from './config/passport.config.js';
 import firebaseAdmin from 'firebase-admin';
 import './config/firebase.config.js';
 import dotenv from 'dotenv';
@@ -21,8 +20,6 @@ app.use(express.static('public'));
 // hace que exista request.cookies y request.signedCookies
 app.use(cookieParser());
 
-// Passport
-app.use(passport.initialize());
 
 
 //! Rutas
