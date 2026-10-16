@@ -7,21 +7,21 @@ const router = Router();
 router.get(
     '/:empresaId', 
     requireAuth,
-    requireEmpresa,
+    requireEmpresa(),
     getProducts
 );
 
 router.get(
     '/:empresaId/:pid', 
     requireAuth,
-    requireEmpresa, 
+    requireEmpresa(), 
     getProductById
 );
 
 router.post(
     '/:empresaId', 
     requireAuth,
-    requireEmpresa, 
+    requireEmpresa(), 
     requireRole(['admin']), 
     createProduct
 );
@@ -29,14 +29,14 @@ router.post(
 router.put(
     '/:empresaId/:pid', 
     requireAuth,
-    requireEmpresa, 
+    requireEmpresa(), 
     updateProduct
 );
 
 router.delete(
     '/:empresaId/:pid', 
     requireAuth,
-    requireEmpresa, 
+    requireEmpresa(), 
     requireRole(['admin']), 
     deleteProduct
 );
