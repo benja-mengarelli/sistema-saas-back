@@ -1,7 +1,7 @@
 import { db, auth } from '../config/firebase.config.js';
 import jwt from 'jsonwebtoken';
 
-export const requireAuth = async(req, res, next) => {
+export const requireAuth = async (req, res, next) => {
 
     try {
         const token = req.headers.authorization?.split(' ')[1]; // Obtener el token del encabezado Authorization
@@ -10,7 +10,12 @@ export const requireAuth = async(req, res, next) => {
             return res.status(401).json({ message: 'Token no proporcionado' });
         }
 
-        const decoded = auth.verifyIdToken(token);
+        let decoded;
+        try {
+            decoded = await auth.verifyIdToken(token);
+        } catch (error) {
+            return res.status(401).json({ message: 'Token no válido' });
+        }
 
         req.user = decoded; // Agregar la información del usuario al objeto req
 
