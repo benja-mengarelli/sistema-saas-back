@@ -1,11 +1,10 @@
 import express from 'express';
 import mongoose from 'mongoose';
 import cookieParser from 'cookie-parser';
-import apiRoutes from './routes/index.js';
-import firebaseAdmin from 'firebase-admin';
 import './config/firebase.config.js';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import router from './routes/index.js';
 
 /*! importar el front url  */
 
@@ -25,7 +24,7 @@ app.use(cookieParser());
 app.use(cors({ origin: [process.env.FRONT_URL, 'http://localhost:5173'] }));
 
 //! Rutas
-app.use("/", apiRoutes);
+app.use("/", router);
 
 // Conexión a MongoDB
 try {
