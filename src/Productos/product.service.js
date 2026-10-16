@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import Product from './product.model.js';
+import Product from './productModel.js';
 import FamiliaProductos from './familia_productosModel.js';
 import { errorHttp } from '../utils/errores.js';
 
@@ -107,3 +107,27 @@ export const deleteProduct = async (empresaId, pid) => {
     if (!eliminado) throw errorHttp(404, 'Producto no encontrado');
     return eliminado;
 };
+
+export async function descontarStockVenta(items, session) {
+    const explotados = await explotarItems(items, session);
+
+    for (const { producto, cantidad } of explotados) {
+        const actualizado = await Product.findOneAndUpdate(
+            { _id: producto, stock: { $gte: cantidad } },
+            { $inc: { stock: -cantidad } },
+            { session, new: true }
+        );
+        if (!actualizado) {
+            throw new Error(`Stock insuficiente para el producto ${producto}`);
+        }
+    }
+    return explotados;
+}
+
+export async function reponerStockVenta(items, session) {
+    const explotados = await explotarItems(items, session);
+    for (const { producto, cantidad } of explotados) {
+        await Product.updateOne({ _id: producto }, { $inc: { stock: cantidad } }, { session });
+    }
+    return explotados;
+}

@@ -10,7 +10,6 @@ import cors from 'cors';
 /*! importar el front url  */
 
 dotenv.config();
-app.use(cors({ origin: [process.env.FRONT_URL, 'http://localhost:5173'] }));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -23,6 +22,7 @@ app.use(express.static('public'));
 // hace que exista request.cookies y request.signedCookies
 app.use(cookieParser());
 
+app.use(cors({ origin: [process.env.FRONT_URL, 'http://localhost:5173'] }));
 
 //! Rutas
 app.use("/", apiRoutes);
