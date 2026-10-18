@@ -12,7 +12,8 @@ const compraSchema = new mongoose.Schema({
         contacto: String
     },
     productos: [{
-        producto: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
+        producto: { type: mongoose.Schema.Types.ObjectId, ref: "Product", default: null }, // null = ítem libre
+        descripcion: { type: String, trim: true },
         cantidad: { type: Number, required: true },
         costoUnitario: { type: Number, required: true },
         subtotal: { type: Number, required: true }
@@ -26,4 +27,4 @@ const compraSchema = new mongoose.Schema({
     estado: { type: String, enum: ["REGISTRADA", "ANULADA"], default: "REGISTRADA" }
 }, { timestamps: true });
 
-export default mongoose.model("Compra", compraSchema);
+export default mongoose.model("Compra", compraSchema.index({ empresaId: 1, createdAt: -1}));

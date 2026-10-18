@@ -1,4 +1,79 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
+import { errorHttp } from '../utils/errores.js';
+import { conTransaccion } from '../utils/transaccion.js';
+import { registrarCompra } from '../MovStock/movimientoStock.service.js'; 
+import {
+    construirLineasCompra, validarProductosCompra,
+    crearDocumentoCompra, actualizarPrecioCompra,
+} from '../Compras/compra.service.js'; // ajustar
+
+function normalizarCompra(body = {}) {
+    const { items } = body;
+    if (!Array.isArray(items) || items.length === 0) throw errorHttp(400, 'La compra necesita al menos un ítem');
+    if (items.length > 100) throw errorHttp(400, 'Demasiados ítems en una sola compra');
+
+    const normalizados = items.map((i, n) => {
+        const cantidad = Number(i?.cantidad);
+        const costoUnitario = Number(i?.costoUnitario);
+        if (!Number.isFinite(cantidad) || cantidad <= 0) throw errorHttp(400, `Ítem ${n + 1}: la cantidad debe ser mayor a 0`);
+        if (!Number.isFinite(costoUnitario) || costoUnitario < 0) throw errorHttp(400, `Ítem ${n + 1}: el costo no es válido`);
+
+        const descripcion = typeof i.descripcion === 'string' ? i.descripcion.trim().slice(0, 120) : '';
+        if (i.producto) {
+            if (!mongoose.isValidObjectId(i.producto)) throw errorHttp(400, `Ítem ${n + 1}: producto inválido`);
+        } else if (!descripcion) {
+            throw errorHttp(400, `Ítem ${n + 1}: indicá un producto o una descripción`);
+        }
+
+        return {
+            producto: i.producto || null,
+            descripcion,
+            cantidad,
+            costoUnitario,
+            actualizarPrecioCompra: Boolean(i.producto && i.actualizarPrecioCompra),
+        };
+    });
+
+    const nombre = typeof body.proveedor?.nombre === 'string' ? body.proveedor.nombre.trim().slice(0, 100) : '';
+    return { items: normalizados, proveedor: nombre ? { nombre } : undefined };
+}
+
+export async function procesarCompra(empresaId, body) {
+    const { items, proveedor } = normalizarCompra(body);
+
+    return conTransaccion(async (session) => {
+        const porId = await validarProductosCompra(empresaId, items, session);
+
+        // Para los ítems del catálogo, guardamos el nombre de ese momento
+        for (const item of items) {
+            if (item.producto) item.descripcion = porId.get(item.producto.toString()).nombre;
+        }
+
+        const { lineas, total } = construirLineasCompra(items);
+        const compra = await crearDocumentoCompra({ empresaId, proveedor, productos: lineas, total }, session);
+
+        const itemsStock = items
+            .filter((i) => i.producto)
+            .map((i) => ({ producto: i.producto, cantidad: i.cantidad }));
+
+        await registrarCompra(
+            { empresaId, items: itemsStock, origen: { tipo: 'COMPRA', referenciaId: compra._id } },
+            session
+        );
+        await actualizarPrecioCompra(empresaId, items, session);
+
+        return compra;
+    });
+}
+
+
+
+
+
+
+
+
+/* import mongoose from "mongoose";
 import CuentaCorriente from "../CtaCorriente/CuentaCorrienteModel.js";
 import Venta from "../Ventas/ventaModel.js";
 import { construirLineasVenta, validarPagos, crearDocumentoVenta, marcarVentaAnulada } from "../Ventas/venta.service.js";
@@ -6,25 +81,11 @@ import { descontarStockVenta, reponerStockVenta } from "../Productos/product.ser
 import { aplicarFacturacion, revertirFacturacion } from "../helper/facturacionCaja.service.js";
 import { obtenerCajaAbierta } from "../Caja/caja.service.js";
 import { construirLineasCompra, validarProductosCompra, crearDocumentoCompra, actualizarPrecioCompra } from "../Compras/compra.service.js";
-import { registrarCompra, cerrarVentasDelDia} from "../MovStock/movimientoStock.service.js";
+import { registrarCompra, cerrarVentasDelDia} from "../MovStock/movimientoStock.service.js"; */
 
-async function conTransaccion(fn) {
-    const session = await mongoose.startSession();
-    try {
-        session.startTransaction();
-        const resultado = await fn(session);
-        await session.commitTransaction();
-        return resultado;
-    } catch (err) {
-        await session.abortTransaction();
-        throw err;
-    } finally {
-        session.endSession();
-    }
-}
 
 // --- Venta directa (mostrador) ---
-export async function posVentaDirecta({ empresaId, cajaId, cliente, items, descuento = 0, recargo = 0, pagos }) {
+/* export async function posVentaDirecta({ empresaId, cajaId, cliente, items, descuento = 0, recargo = 0, pagos }) {
     return conTransaccion(async (session) => {
         await obtenerCajaAbierta(cajaId, empresaId, session);
 
@@ -43,10 +104,10 @@ export async function posVentaDirecta({ empresaId, cajaId, cliente, items, descu
 
         return venta;
     });
-}
+} */
 
 // --- Anular venta ---
-export async function posAnularVenta({ ventaId, empresaId }) {
+/* export async function posAnularVenta({ ventaId, empresaId }) {
     return conTransaccion(async (session) => {
         const venta = await Venta.findOne({ _id: ventaId, empresaId }).session(session);
         if (!venta) throw new Error("Venta no encontrada");
@@ -66,10 +127,10 @@ export async function posAnularVenta({ ventaId, empresaId }) {
         await marcarVentaAnulada(ventaId, empresaId, session);
         return venta;
     });
-}
+} */
 
 // --- Abrir cuenta corriente ---
-export async function posAbrirCuentaCorriente({ empresaId, cajaId, cliente, items }) {
+/* export async function posAbrirCuentaCorriente({ empresaId, cajaId, cliente, items }) {
     return conTransaccion(async (session) => {
         await obtenerCajaAbierta(cajaId, empresaId, session);
 
@@ -99,10 +160,10 @@ export async function posAgregarConsumoCC({ cuentaCorrienteId, empresaId, cajaId
 
         return ccService.agregarCargo(cuentaCorrienteId, empresaId, venta, session);
     });
-}
+} */
 
 // --- Cobrar CC (total o parcial) ---
-export async function posCobrarCuentaCorriente({ cuentaCorrienteId, empresaId, cajaId, pagos }) {
+/* export async function posCobrarCuentaCorriente({ cuentaCorrienteId, empresaId, cajaId, pagos }) {
     return conTransaccion(async (session) => {
         await obtenerCajaAbierta(cajaId, empresaId, session);
 
@@ -117,10 +178,10 @@ export async function posCobrarCuentaCorriente({ cuentaCorrienteId, empresaId, c
         const lineasParaFacturar = await ccService.aplicarCobroFIFO(cc, montoPago, session);
         return ccService.registrarCobro({ cc, cajaId, pagos, lineasParaFacturar }, session);
     });
-}
+} */
 
 // --- Anular un cargo de CC sin pagos ---
-export async function posAnularCargoCC({ cuentaCorrienteId, empresaId, ventaId }) {
+/* export async function posAnularCargoCC({ cuentaCorrienteId, empresaId, ventaId }) {
     return conTransaccion(async (session) => {
         const cc = await CuentaCorriente.findOne({ _id: cuentaCorrienteId, empresaId }).session(session);
         if (!cc) throw new Error("Cuenta corriente no encontrada");
@@ -135,10 +196,10 @@ export async function posAnularCargoCC({ cuentaCorrienteId, empresaId, ventaId }
         await cc.save({ session });
         return { cc, cargoAnulado: cargo };
     });
-}
+} */
 
 /*! CAJA*/
-export async function posAbrirCaja({ empresaId, abiertaPor, efectivoInicial }) {
+/* export async function posAbrirCaja({ empresaId, abiertaPor, efectivoInicial }) {
     return conTransaccion(async (session) => {
         try {
             return await cajaService.crearCajaDoc(
@@ -183,10 +244,10 @@ export async function posCerrarCaja({ empresaId, cajaId, efectivoFinal, cerradaP
 
         return cajaService.cerrarCajaDoc({ caja, efectivoFinal, cerradaPor }, session);
     });
-}
+} */
 
 /*! COMPRAS */
-export async function posRegistrarCompra({ empresaId, cajaId, proveedor, items, pagos = [] }) {
+/* export async function posRegistrarCompra({ empresaId, cajaId, proveedor, items, pagos = [] }) {
     return conTransaccion(async (session) => {
         await validarProductosCompra(items, session);
 
@@ -229,4 +290,4 @@ export async function posRegistrarCompra({ empresaId, cajaId, proveedor, items, 
 
         return compra;
     });
-}
+} */

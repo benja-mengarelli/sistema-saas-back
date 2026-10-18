@@ -21,4 +21,4 @@ const movimientoStockSchema = new mongoose.Schema({
     timestamps: true
 });
 
-export default mongoose.model("MovimientoStock", movimientoStockSchema)
+export default mongoose.model("MovimientoStock", movimientoStockSchema.index({ empresaId: 1, createdAt: -1}))

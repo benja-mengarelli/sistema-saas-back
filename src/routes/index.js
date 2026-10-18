@@ -5,7 +5,7 @@ import loginRouter from "../Login/login.routes.js";
 import posRouter from "../POS/pos.routes.js";
 import operadorRouter from "../operador/operador.routes.js";
 import movimientosRouter from "../MovStock/movimientos.routes.js"
-
+import comprasRouter from "../Compras/compra.routes.js"
 
 const router = Router();
 
@@ -15,5 +15,6 @@ router.use("/api/pos", posRouter);
 router.use("/api/login", loginRouter);
 router.use("/api/empresas/:empresaId/operadores", operadorRouter);
 router.use("/api/movimientos-stock", movimientosRouter);
+router.use("/api/compras", comprasRouter);
 
 export default router;

@@ -7,34 +7,35 @@ import { errorHttp } from '../utils/errores.js';
 import { conTransaccion } from '../utils/transaccion.js';
 
 
-export const getMovimientosStock = async (empresaId) => {
-    try {
-        return await MovimientoStock.find({ empresaId })
-            .sort({ createdAt: -1 })
-            .populate("productos.producto", "_id nombre");
-    } catch (error) {
-        console.error("Error al obtener movimientos de stock:", error);
-        throw new Error("Error al obtener movimientos de stock");
-    }
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+// Ventana móvil: ahora menos N días (por defecto 15, tope 90)
+export const getMovimientosStock = async (empresaId, dias) => {
+    const n = Math.min(Math.max(parseInt(dias, 10) || 15, 1), 90);
+    const desde = new Date(Date.now() - n * DIA_MS);
+
+    return MovimientoStock.aggregate([
+        { $match: { empresaId, createdAt: { $gte: desde } } },
+        { $sort: { createdAt: -1 } },
+        {
+            $project: {
+                tipo: 1,
+                origen: 1,
+                createdAt: 1,
+                cantidadProductos: { $size: { $ifNull: ['$productos', []] } },
+            },
+        },
+    ]);
 };
 
 export const getMovimientoStockById = async (empresaId, movimientoId) => {
-    try {
-        return await MovimientoStock.findOne({ _id: movimientoId, empresaId })
-            .populate("productos.producto", "_id nombre");
-    } catch (error) {
-        console.error("Error al obtener movimiento de stock:", error);
-        throw new Error("Error al obtener movimiento de stock");
-    }
-};
+    if (!mongoose.isValidObjectId(movimientoId)) throw errorHttp(400, 'Id inválido');
 
-export const deleteMovimientoStock = async (empresaId, movimientoId) => {
-    try {
-        return await MovimientoStock.findOneAndDelete({ _id: movimientoId, empresaId });
-    } catch (error) {
-        console.error("Error al eliminar movimiento de stock:", error);
-        throw new Error("Error al eliminar movimiento de stock");
-    }
+    const mov = await MovimientoStock.findOne({ _id: movimientoId, empresaId })
+        .populate('productos.producto', '_id nombre')
+        .lean();
+    if (!mov) throw errorHttp(404, 'Movimiento no encontrado');
+    return mov;
 };
 
 
@@ -49,15 +50,16 @@ export async function aplicarMovimiento({ empresaId, items, signo, tipo, origen 
 
     for (const { producto, cantidad } of explotados) {
         const delta = signo * cantidad;
-        const prod = await Product.findById(producto).session(session);
+        const prod = await Product.findOne({ _id: producto, empresaId }).session(session);
+        if (!prod) throw errorHttp(404, `Producto no encontrado: ${producto}`);
+
         const stockAnterior = prod.stock;
         const stockActual = stockAnterior + delta;
-
         if (stockActual < 0) {
-            throw new Error(`Stock insuficiente: producto ${producto}, disponible ${stockAnterior}`);
+            throw errorHttp(409, `Stock insuficiente: ${prod.nombre}, disponible ${stockAnterior}`);
         }
 
-        await Product.updateOne({ _id: producto }, { $inc: { stock: delta } }, { session });
+        await Product.updateOne({ _id: producto, empresaId }, { $inc: { stock: delta } }, { session });
         lineas.push({ producto, cantidad: delta, stockAnterior, stockActual });
     }
 
@@ -123,7 +125,7 @@ export async function registrarAjuste({ empresaId, conteos, origen = { tipo: 'AJ
     return mov;
 }
 
-/*! CIERRE DE CAJA */ 
+/*! CIERRE DE CAJA */
 export async function cerrarVentasDelDia({ empresaId, cajaId }, session) {
     const ventas = await Venta.find({
         empresaId,
