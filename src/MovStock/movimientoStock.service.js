@@ -85,12 +85,17 @@ export const registrarDevolucionProveedor = (data, session) =>
 
 /*! AJUSTE DE STOCK */
 export async function registrarAjuste({ empresaId, conteos, origen = { tipo: 'AJUSTE' } }, session) {
+    const ids = conteos.map((c) => c.producto);
+    const prods = await Product
+        .find({ _id: { $in: ids }, empresaId, activo: { $ne: false } })
+        .session(session);
+    const porId = new Map(prods.map((p) => [String(p._id), p]));
+
     const lineas = [];
+    const operaciones = [];
 
     for (const { producto, stockContado } of conteos) {
-        const prod = await Product
-            .findOne({ _id: producto, empresaId, activo: { $ne: false } })
-            .session(session);
+        const prod = porId.get(String(producto));
         if (!prod) throw errorHttp(404, `Producto no encontrado: ${producto}`);
         if (!prod.stockeable) continue;
 
@@ -98,11 +103,18 @@ export async function registrarAjuste({ empresaId, conteos, origen = { tipo: 'AJ
         const delta = stockContado - stockAnterior;
         if (delta === 0) continue;
 
-        await Product.updateOne({ _id: producto, empresaId }, { $set: { stock: stockContado } }, { session });
-        lineas.push({ producto, cantidad: delta, stockAnterior, stockActual: stockContado });
+        operaciones.push({
+            updateOne: {
+                filter: { _id: prod._id, empresaId },
+                update: { $set: { stock: stockContado } },
+            },
+        });
+        lineas.push({ producto: prod._id, cantidad: delta, stockAnterior, stockActual: stockContado });
     }
 
     if (!lineas.length) return null;
+
+    await Product.bulkWrite(operaciones, { session });
 
     const [mov] = await MovimientoStock.create(
         [{ empresaId, productos: lineas, tipo: 'AJUSTE', origen }],

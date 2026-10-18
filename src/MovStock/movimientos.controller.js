@@ -1,4 +1,4 @@
-import { ajustarStockConteo } from './movimientosStock.service.js'; 
+import { ajustarStockConteo } from './movimientoStock.service.js'; 
 import { responderError } from '../utils/errores.js';
 
 export const postAjusteStock = async (req, res) => {
