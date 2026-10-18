@@ -11,10 +11,9 @@ const familiaSchema = new mongoose.Schema({
         }]
 });
 
-familiaSchema.pre("validate", function(next) {
+familiaSchema.pre("validate", function() {
     this.stockeable = false;
     this.stock = 0;
-    next();
 });
 
 const FamiliaProductos = Product.discriminator("FamiliaProductos", familiaSchema, "COMBO")

@@ -3,6 +3,8 @@ import MovimientoStock from "./movimientoStockModel.js";
 import Product from "../Productos/productModel.js";
 import { explotarItems } from "../helper/explotarProductos.js";
 import Venta from "../Ventas/ventaModel.js";
+import { errorHttp } from '../utils/errores.js';
+import { conTransaccion } from '../utils/transaccion.js';
 
 
 export const getMovimientosStock = async (empresaId) => {
@@ -82,26 +84,28 @@ export const registrarDevolucionProveedor = (data, session) =>
 
 
 /*! AJUSTE DE STOCK */
-export async function registrarAjuste ({ empresaId, conteos, origen }, session) {
-    // conteos: [{ producto, stockContado }]
+export async function registrarAjuste({ empresaId, conteos, origen = { tipo: 'AJUSTE' } }, session) {
     const lineas = [];
 
     for (const { producto, stockContado } of conteos) {
-        const prod = await Product.findById(producto).session(session);
+        const prod = await Product
+            .findOne({ _id: producto, empresaId, activo: { $ne: false } })
+            .session(session);
+        if (!prod) throw errorHttp(404, `Producto no encontrado: ${producto}`);
         if (!prod.stockeable) continue;
 
         const stockAnterior = prod.stock;
         const delta = stockContado - stockAnterior;
         if (delta === 0) continue;
 
-        await Product.updateOne({ _id: producto }, { $set: { stock: stockContado } }, { session });
+        await Product.updateOne({ _id: producto, empresaId }, { $set: { stock: stockContado } }, { session });
         lineas.push({ producto, cantidad: delta, stockAnterior, stockActual: stockContado });
     }
 
     if (!lineas.length) return null;
 
     const [mov] = await MovimientoStock.create(
-        [{ empresaId, productos: lineas, tipo: "AJUSTE", origen }],
+        [{ empresaId, productos: lineas, tipo: 'AJUSTE', origen }],
         { session }
     );
     return mov;
@@ -140,4 +144,29 @@ export async function cerrarVentasDelDia({ empresaId, cajaId }, session) {
         { session }
     );
     return mov;
+}
+
+function validarConteos(conteos) {
+    if (!Array.isArray(conteos) || conteos.length === 0) throw errorHttp(400, 'No hay conteos para guardar');
+    if (conteos.length > 1000) throw errorHttp(400, 'Demasiados productos en un solo conteo');
+
+    const vistos = new Set();
+    for (const c of conteos) {
+        if (!mongoose.isValidObjectId(c?.producto)) throw errorHttp(400, 'Producto inválido');
+        if (typeof c.stockContado !== 'number' || !Number.isFinite(c.stockContado) || c.stockContado < 0) {
+            throw errorHttp(400, 'El stock contado debe ser un número mayor o igual a 0');
+        }
+        if (vistos.has(String(c.producto))) throw errorHttp(400, 'Hay un producto repetido en el conteo');
+        vistos.add(String(c.producto));
+    }
+}
+
+export async function ajustarStockConteo(empresaId, conteos) {
+    validarConteos(conteos);
+
+    const mov = await conTransaccion((session) =>
+        registrarAjuste({ empresaId, conteos, origen: { tipo: 'AJUSTE' } }, session)
+    );
+
+    return { ajustados: mov ? mov.productos.length : 0, movimientoId: mov ? mov._id : null };
 }
