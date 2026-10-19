@@ -5,7 +5,11 @@ import { registrarCompra } from '../MovStock/movimientoStock.service.js';
 import {
     construirLineasCompra, validarProductosCompra,
     crearDocumentoCompra, actualizarPrecioCompra,
-} from '../Compras/compra.service.js'; // ajustar
+} from '../Compras/compra.service.js';
+import { cerrarVentasDelDia } from '../MovStock/movimientoStock.service.js'; 
+import { obtenerCajaAbierta, cerrarCaja, calcularResumen } from '../Caja/caja.service.js'; 
+
+
 
 function normalizarCompra(body = {}) {
     const { items } = body;
@@ -66,6 +70,21 @@ export async function procesarCompra(empresaId, body) {
     });
 }
 
+export async function cerrarCajaPOS(empresaId, { efectivoContado, cerradaPor }) {
+    if (typeof efectivoContado !== 'number' || !Number.isFinite(efectivoContado) || efectivoContado < 0) {
+        throw errorHttp(400, 'El efectivo contado debe ser un número mayor o igual a 0');
+    }
+
+    return conTransaccion(async (session) => {
+        const caja = await obtenerCajaAbierta(empresaId, session);
+        if (!caja) throw errorHttp(404, 'No hay una caja abierta');
+
+        await cerrarVentasDelDia({ empresaId, cajaId: caja._id }, session); // movimiento de stock agrupado
+        const cerrada = await cerrarCaja({ caja, efectivoContado, cerradaPor }, session);
+
+        return { caja: cerrada, resumen: calcularResumen(cerrada) };
+    });
+}
 
 
 

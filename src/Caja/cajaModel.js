@@ -24,11 +24,11 @@ const cajaSchema = new mongoose.Schema({
         default: "miembro"
     },
     efectivo: {
-        Inicial: {
+        inicial: {
             type: Number,
             default: 0
         },
-        Final: {
+        final: {
             type: Number,
             default: 0
         },
