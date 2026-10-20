@@ -1,8 +1,9 @@
 import CuentaCorriente from "./CuentaCorrienteModel.js";
 import Venta from "../Ventas/ventaModel.js";
-
+import { errorHttp } from "../utils/errores.js";
 
 const ABIERTAS = ['ABIERTA', 'PARCIAL'];
+const redondear2 = (n) => Math.round(n * 100) / 100;
 
 export function recalcularCC(cc) {
     cc.totalCargos = redondear2(cc.cargos.reduce((s, c) => s + c.monto, 0));
@@ -43,7 +44,7 @@ export async function ventasDeCargos(empresaId, cc, session) {
     return Venta.find({ empresaId, _id: { $in: cc.cargos.map((c) => c.ventaId) } }).session(session);
 }
 
-// junta las líneas de todos los cargos en una sola lista
+// junta las líneas de todos los cargos en una sola lista redondear2
 export function unificarProductos(ventas) {
     const mapa = new Map();
     for (const v of ventas) {
