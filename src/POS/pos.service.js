@@ -17,6 +17,7 @@ import { crearCC, obtenerCCAbierta, obtenerCCPorId, agregarCargo, agregarPago, v
 
 
 const TIPOS_PAGO = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA'];
+const redondear2 = (n) => Math.round(n * 100) / 100;
 
 function normalizarCompra(body = {}) {
     const { items } = body;
@@ -55,7 +56,7 @@ export async function procesarCompra(empresaId, body) {
     return conTransaccion(async (session) => {
         const porId = await validarProductosCompra(empresaId, items, session);
 
-        // Para los ítems del catálogo, guardamos el nombre de ese momento
+        // Para los ítems del catálogo, guardamos el nombre de ese momento redondear2
         for (const item of items) {
             if (item.producto) item.descripcion = porId.get(item.producto.toString()).nombre;
         }
