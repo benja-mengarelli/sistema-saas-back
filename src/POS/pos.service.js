@@ -13,6 +13,7 @@ import {
     lineasParaFacturar, crearDocumentoVenta,
 } from '../Ventas/venta.service.js'; 
 import { aplicarFacturacion } from '../helper/facturacionCaja.service.js';
+import { crearCC, obtenerCCAbierta, obtenerCCPorId, agregarCargo, agregarPago, ventasDeCargos, unificarProductos, liquidarVentas, cerrarCC } from '../CtaCorriente/cuentaCorriente.service.js';
 
 
 const TIPOS_PAGO = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA'];
