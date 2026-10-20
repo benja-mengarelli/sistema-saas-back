@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Product from './productModel.js';
 import FamiliaProductos from './familia_productosModel.js';
 import { errorHttp } from '../utils/errores.js';
+import { explotarItems } from '../helper/explotarProductos.js';
 
 const ACTIVO = { $ne: false }; // incluye docs viejos que no tienen el campo
 const escapar = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
