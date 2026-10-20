@@ -4,7 +4,7 @@ import { errorHttp } from "../utils/errores.js";
 const TIPO_PAGO_TO_CAJA_KEY = { EFECTIVO: "efectivo", TRANSFERENCIA: "transferencia", TARJETA: "tarjeta" };
 const TIPO_PRODUCTO_TO_FACTURACION_KEY = { PRODUCTO: "productos", COMBO: "productos", SERVICIO: "servicios", ALQUILER: "alquileres" };
 
-function incFromPagos(pagos) {
+export function incFromPagos(pagos) {
     const inc = {};
     for (const p of pagos) {
         const key = TIPO_PAGO_TO_CAJA_KEY[p.tipoPago];
@@ -13,7 +13,7 @@ function incFromPagos(pagos) {
     return inc;
 }
 
-function incFromLineas(lineas) {
+export function incFromLineas(lineas) {
     const inc = {};
     for (const l of lineas) {
         const key = TIPO_PRODUCTO_TO_FACTURACION_KEY[l.tipo];
@@ -22,7 +22,7 @@ function incFromLineas(lineas) {
     return inc;
 }
 
-async function aplicarIncrementos(cajaId, inc, session) {
+export async function aplicarIncrementos(cajaId, inc, session) {
     if (Object.keys(inc).length === 0) return;
     const r = await Caja.updateOne({ _id: cajaId, estado: "abierta" }, { $inc: inc }, { session });
     if (r.matchedCount === 0) throw errorHttp(409, "La caja ya no está abierta");

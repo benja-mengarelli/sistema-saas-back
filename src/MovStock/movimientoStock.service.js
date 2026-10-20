@@ -130,7 +130,8 @@ export async function cerrarVentasDelDia({ empresaId, cajaId }, session) {
     const ventas = await Venta.find({
         empresaId,
         cajaId,
-        estado: { $ne: "ANULADO" }
+        estado: { $ne: "ANULADO" },
+        afectaStock: { $ne: false }
     }).session(session);
 
     const acumulado = new Map();

@@ -1,118 +1,86 @@
 import CuentaCorriente from "../models/cuentaCorriente.model.js";
 import Venta from "../models/venta.model.js";
-import { incFromPagos, incFromLineas, aplicarIncrementos } from "../helper/facturacionCaja.service.js";
 
 
-export const getCC = async (empresaId) => {
-    try {
-        return await CuentaCorriente.find({ empresaId }).sort({ createdAt: -1 });
-    } catch (error) {
-        console.error("Error al obtener cuentas corrientes:", error);
-        throw new Error("Error al obtener cuentas corrientes");
-    }
-};
+const ABIERTAS = ['ABIERTA', 'PARCIAL'];
 
-export const getCCById = async (empresaId, ccId) => {
-    try {
-        return await CuentaCorriente.findOne({ _id: ccId, empresaId });
-    } catch (error) {
-        console.error("Error al obtener cuenta corriente:", error);
-        throw new Error("Error al obtener cuenta corriente");
-    }
-};
-
-export const deleteCC = async (empresaId, ccId) => {
-    try {
-        return await CuentaCorriente.findOneAndDelete({ _id: ccId, empresaId });
-    } catch (error) {
-        console.error("Error al eliminar cuenta corriente:", error);
-        throw new Error("Error al eliminar cuenta corriente");
-    }
-};
-
-
-export async function crearCuentaCorriente({ empresaId, cliente, venta }, session) {
-    const [cc] = await CuentaCorriente.create([{
-        empresaId,
-        cliente,
-        cargos: [{ ventaId: venta._id, monto: venta.total }],
-        totalCargos: venta.total,
-        saldo: venta.total
-    }], { session });
+export function recalcularCC(cc) {
+    cc.totalCargos = redondear2(cc.cargos.reduce((s, c) => s + c.monto, 0));
+    cc.totalPagado = redondear2(cc.pagos.reduce((s, p) => s + p.monto, 0));
+    cc.saldo = redondear2(cc.totalCargos - cc.totalPagado);
+    if (ABIERTAS.includes(cc.estado)) cc.estado = cc.totalPagado > 0 ? 'PARCIAL' : 'ABIERTA';
     return cc;
 }
 
-export async function agregarCargo(cuentaCorrienteId, empresaId, venta, session) {
-    const cc = await CuentaCorriente.findOne({ _id: cuentaCorrienteId, empresaId }).session(session);
-    if (!cc) throw new Error("Cuenta corriente no encontrada");
-    if (["SALDADA", "ANULADA"].includes(cc.estado)) throw new Error(`No se puede agregar consumo a una cuenta ${cc.estado}`);
-
-    cc.cargos.push({ ventaId: venta._id, monto: venta.total });
-    cc.totalCargos += venta.total;
-    cc.saldo += venta.total;
-    await cc.save({ session });
+export async function obtenerCCAbierta(empresaId, cuentaId, session) {
+    const cc = await CuentaCorriente.findOne({ _id: cuentaId, empresaId, estado: { $in: ABIERTAS } }).session(session);
+    if (!cc) throw errorHttp(404, 'La cuenta corriente no existe o ya fue finalizada');
     return cc;
 }
 
-// Distribuye el pago FIFO sobre los cargos pendientes, cierra ventas cubiertas
-// al 100%, y devuelve las líneas a facturar (ya prorrateadas) para que POS
-// las aplique a caja junto con los pagos.
-export async function aplicarCobroFIFO(cc, montoPago, session) {
-    let restante = montoPago;
-    const lineasParaFacturar = [];
+export async function obtenerCCPorId(empresaId, cuentaId) {
+    return CuentaCorriente.findOne({ _id: cuentaId, empresaId }).lean();
+}
 
-    for (const cargo of cc.cargos) {
-        if (restante <= 0) break;
-        const pendiente = cargo.monto - cargo.pagado;
-        if (pendiente <= 0) continue;
+export async function crearCC(empresaId, cliente, session) {
+    const [cc] = await CuentaCorriente.create([{ empresaId, cliente }], { session });
+    return cc;
+}
 
-        const aporte = Math.min(restante, pendiente);
-        cargo.pagado += aporte;
-        restante -= aporte;
+export async function agregarCargo(cc, ventaId, monto, session) {
+    cc.cargos.push({ ventaId, monto });
+    recalcularCC(cc);
+    return cc.save({ session });
+}
 
-        const venta = await Venta.findById(cargo.ventaId).session(session);
-        const proporcion = aporte / cargo.monto;
-        for (const linea of venta.productos) {
-            lineasParaFacturar.push({ tipo: linea.tipo, subtotal: linea.subtotal * proporcion });
-        }
+export async function agregarPago(cc, pago, session) {
+    cc.pagos.push(pago);
+    recalcularCC(cc);
+    return cc.save({ session });
+}
 
-        if (cargo.pagado === cargo.monto) {
-            venta.estado = "COMPLETADO";
-            venta.pagoCompleto = true;
-            await venta.save({ session });
+export async function ventasDeCargos(empresaId, cc, session) {
+    return Venta.find({ empresaId, _id: { $in: cc.cargos.map((c) => c.ventaId) } }).session(session);
+}
+
+// junta las líneas de todos los cargos en una sola lista
+export function unificarProductos(ventas) {
+    const mapa = new Map();
+    for (const v of ventas) {
+        for (const p of v.productos) {
+            const k = String(p.producto);
+            const u = mapa.get(k) ?? { producto: p.producto, tipo: p.tipo, nombre: p.nombre, cantidad: 0, subtotal: 0 };
+            u.cantidad += p.cantidad;
+            u.subtotal = redondear2(u.subtotal + p.subtotal);
+            mapa.set(k, u);
         }
     }
-
-    return lineasParaFacturar;
+    return [...mapa.values()];
 }
 
-export async function registrarCobro({ cc, cajaId, pagos, lineasParaFacturar }, session) {
-    const montoPago = pagos.reduce((acc, p) => acc + p.monto, 0);
-
-    await aplicarIncrementos(cajaId, { ...incFromPagos(pagos), ...incFromLineas(lineasParaFacturar) }, session);
-
-    cc.pagos.push({ cajaId, pagos, monto: montoPago, fecha: new Date() });
-    cc.totalPagado += montoPago;
-    cc.saldo -= montoPago;
-    cc.estado = cc.saldo === 0 ? "SALDADA" : "PARCIAL";
-    if (cc.estado === "SALDADA") cc.fechaCierre = new Date();
-    await cc.save({ session });
-    return cc;
+export async function liquidarVentas(ids, session) {
+    await Venta.updateMany({ _id: { $in: ids } }, { $set: { estado: 'LIQUIDADO' } }, { session });
 }
 
-export async function quitarCargo(cc, ventaId) {
-    const cargo = cc.cargos.find(c => c.ventaId.equals(ventaId));
-    if (!cargo) throw new Error("El cargo no pertenece a esta cuenta corriente");
-    if (cargo.pagado > 0) throw new Error("No se puede anular un cargo con pagos registrados (requiere flujo de devolución)");
-
-    cc.cargos = cc.cargos.filter(c => !c.ventaId.equals(ventaId));
-    cc.totalCargos -= cargo.monto;
-    cc.saldo -= cargo.monto;
-
-    if (cc.cargos.length === 0) cc.estado = "ANULADA";
-    else if (cc.saldo === 0) cc.estado = "SALDADA";
-    else if (cc.totalPagado > 0) cc.estado = "PARCIAL";
-
-    return cargo;
+export async function cerrarCC(cc, ventaFinalId, session) {
+    cc.estado = 'SALDADA';
+    cc.ventaFinalId = ventaFinalId;
+    cc.saldo = 0; // si hubo redondeo, la diferencia quedó como descuento/recargo en la venta
+    return cc.save({ session });
 }
 
+export async function listarCCAbiertas(empresaId) {
+    return CuentaCorriente.find({ empresaId, estado: { $in: ABIERTAS } })
+        .select('cliente totalCargos totalPagado saldo estado updatedAt')
+        .sort({ updatedAt: -1 })
+        .lean();
+}
+
+export async function detalleCC(empresaId, cuentaId) {
+    const cc = await CuentaCorriente.findOne({ _id: cuentaId, empresaId }).lean();
+    if (!cc) throw errorHttp(404, 'Cuenta corriente inexistente');
+    const ventas = await Venta.find({ empresaId, _id: { $in: cc.cargos.map((c) => c.ventaId) } })
+        .select('productos total createdAt')
+        .lean();
+    return { ...cc, ventas };
+}

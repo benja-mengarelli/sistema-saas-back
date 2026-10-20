@@ -6,6 +6,9 @@ const ventaSchema = new mongoose.Schema({
     cajaId: { type: mongoose.Schema.Types.ObjectId, ref: "Caja", required: true },
 
     cliente: { type: String, default: "Consumidor" },
+    cuentaCorrienteId: { type: mongoose.Schema.Types.ObjectId, ref: "CuentaCorriente" },
+    afectaStock: { type: Boolean, default: true },
+    estado: { type: String, enum: ["COMPLETADO", "PENDIENTE", "LIQUIDADO", "ANULADO"], default: "COMPLETADO" },
 
     productos: [{
         producto: { type: mongoose.Schema.Types.ObjectId, ref: "Product", required: true },
