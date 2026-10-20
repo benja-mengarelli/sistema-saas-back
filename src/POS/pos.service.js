@@ -95,6 +95,26 @@ export async function cerrarCajaPOS(empresaId, { efectivoContado, cerradaPor }) 
 
 
 /*! VENTAS  */
+function validarClave(c) {
+    if (typeof c !== 'string' || c.length < 8 || c.length > 64) throw errorHttp(400, 'Clave de operación inválida');
+    return c;
+}
+
+function normalizarItems(items) {
+    if (!Array.isArray(items) || items.length === 0) throw errorHttp(400, 'Hace falta al menos un producto');
+    if (items.length > 100) throw errorHttp(400, 'Demasiados productos en una sola operación');
+    const porProducto = new Map();
+    items.forEach((i, n) => {
+        if (!mongoose.isValidObjectId(i?.producto)) throw errorHttp(400, `Producto ${n + 1} inválido`);
+        const cantidad = Number(i.cantidad);
+        if (!Number.isFinite(cantidad) || cantidad <= 0) throw errorHttp(400, `Producto ${n + 1}: cantidad inválida`);
+        porProducto.set(String(i.producto), (porProducto.get(String(i.producto)) || 0) + cantidad);
+    });
+    return [...porProducto].map(([producto, cantidad]) => ({ producto, cantidad }));
+}
+
+
+
 function normalizarVenta(body = {}) {
     const { claveIdempotencia, items, pagos, montoACobrar, cliente } = body;
 
