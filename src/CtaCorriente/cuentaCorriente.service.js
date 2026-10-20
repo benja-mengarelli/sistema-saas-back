@@ -1,5 +1,5 @@
-import CuentaCorriente from "../models/cuentaCorriente.model.js";
-import Venta from "../models/venta.model.js";
+import CuentaCorriente from "./CuentaCorrienteModel.js";
+import Venta from "../Ventas/ventaModel.js";
 
 
 const ABIERTAS = ['ABIERTA', 'PARCIAL'];

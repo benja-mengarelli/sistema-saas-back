@@ -1,3 +1,6 @@
+import { procesarCargoCC, registrarPagoCC, finalizarCC } from "../POS/pos.service.js";
+import { detalleCC, listarCCAbiertas } from "./cuentaCorriente.service.js"
+
 const enviar = (res, r) => res.status(r.repetida || r.repetido ? 200 : 201).json(r);
 
 export const getCuentasCorrientes = async (req, res, next) => {
