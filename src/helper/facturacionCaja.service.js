@@ -1,4 +1,5 @@
 import Caja from "../Caja/cajaModel.js";
+import { errorHttp } from "../utils/errores.js";
 
 const TIPO_PAGO_TO_CAJA_KEY = { EFECTIVO: "efectivo", TRANSFERENCIA: "transferencia", TARJETA: "tarjeta" };
 const TIPO_PRODUCTO_TO_FACTURACION_KEY = { PRODUCTO: "productos", COMBO: "productos", SERVICIO: "servicios", ALQUILER: "alquileres" };
@@ -23,7 +24,8 @@ function incFromLineas(lineas) {
 
 async function aplicarIncrementos(cajaId, inc, session) {
     if (Object.keys(inc).length === 0) return;
-    await Caja.updateOne({ _id: cajaId }, { $inc: inc }, { session });
+    const r = await Caja.updateOne({ _id: cajaId, estado: "abierta" }, { $inc: inc }, { session });
+    if (r.matchedCount === 0) throw errorHttp(409, "La caja ya no está abierta");
 }
 
 export async function aplicarFacturacion({ cajaId, pagos, lineas }, session) {

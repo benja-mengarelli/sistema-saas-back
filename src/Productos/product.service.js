@@ -118,7 +118,8 @@ export async function descontarStockVenta(items, session) {
             { session, new: true }
         );
         if (!actualizado) {
-            throw new Error(`Stock insuficiente para el producto ${producto}`);
+            const p = await Product.findById(producto).select('nombre stock').session(session);
+            throw errorHttp(409, `Stock insuficiente: ${p?.nombre ?? producto} (disponible ${p?.stock ?? 0})`);
         }
     }
     return explotados;

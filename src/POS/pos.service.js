@@ -1,15 +1,21 @@
 import mongoose from 'mongoose';
 import { errorHttp } from '../utils/errores.js';
 import { conTransaccion } from '../utils/transaccion.js';
-import { registrarCompra } from '../MovStock/movimientoStock.service.js'; 
+import { registrarCompra, cerrarVentasDelDia } from '../MovStock/movimientoStock.service.js';
 import {
     construirLineasCompra, validarProductosCompra,
     crearDocumentoCompra, actualizarPrecioCompra,
 } from '../Compras/compra.service.js';
-import { cerrarVentasDelDia } from '../MovStock/movimientoStock.service.js'; 
-import { obtenerCajaAbierta, cerrarCaja, calcularResumen } from '../Caja/caja.service.js'; 
+import { obtenerCajaAbierta, cerrarCaja, calcularResumen } from '../Caja/caja.service.js';
+import { descontarStockVenta } from '../Productos/product.service.js'; 
+import {
+    buscarVentaPorClave, construirLineasVenta, calcularCobro,
+    lineasParaFacturar, crearDocumentoVenta,
+} from '../Ventas/venta.service.js'; 
+import { aplicarFacturacion } from '../helper/facturacionCaja.service.js';
 
 
+const TIPOS_PAGO = ['EFECTIVO', 'TRANSFERENCIA', 'TARJETA'];
 
 function normalizarCompra(body = {}) {
     const { items } = body;
@@ -88,225 +94,99 @@ export async function cerrarCajaPOS(empresaId, { efectivoContado, cerradaPor }) 
 
 
 
+/*! VENTAS  */
+function normalizarVenta(body = {}) {
+    const { claveIdempotencia, items, pagos, montoACobrar, cliente } = body;
 
+    if (typeof claveIdempotencia !== 'string' || claveIdempotencia.length < 8 || claveIdempotencia.length > 64) {
+        throw errorHttp(400, 'Clave de operación inválida');
+    }
+    if (!Array.isArray(items) || items.length === 0) throw errorHttp(400, 'La venta necesita al menos un producto');
+    if (items.length > 100) throw errorHttp(400, 'Demasiados productos en una sola venta');
 
-
-
-/* import mongoose from "mongoose";
-import CuentaCorriente from "../CtaCorriente/CuentaCorrienteModel.js";
-import Venta from "../Ventas/ventaModel.js";
-import { construirLineasVenta, validarPagos, crearDocumentoVenta, marcarVentaAnulada } from "../Ventas/venta.service.js";
-import { descontarStockVenta, reponerStockVenta } from "../Productos/product.service.js";
-import { aplicarFacturacion, revertirFacturacion } from "../helper/facturacionCaja.service.js";
-import { obtenerCajaAbierta } from "../Caja/caja.service.js";
-import { construirLineasCompra, validarProductosCompra, crearDocumentoCompra, actualizarPrecioCompra } from "../Compras/compra.service.js";
-import { registrarCompra, cerrarVentasDelDia} from "../MovStock/movimientoStock.service.js"; */
-
-
-// --- Venta directa (mostrador) ---
-/* export async function posVentaDirecta({ empresaId, cajaId, cliente, items, descuento = 0, recargo = 0, pagos }) {
-    return conTransaccion(async (session) => {
-        await obtenerCajaAbierta(cajaId, empresaId, session);
-
-        const { lineas, subtotalGeneral } = await construirLineasVenta(items, session);
-        const total = subtotalGeneral - descuento + recargo;
-        validarPagos(pagos, total);
-
-        await descontarStockVenta(items, session);
-
-        const venta = await crearDocumentoVenta({
-            empresaId, cajaId, cliente, productos: lineas, total, pagos,
-            pagoCompleto: true, descuento, recargo, estado: "COMPLETADO"
-        }, session);
-
-        await aplicarFacturacion({ cajaId, pagos, lineas }, session);
-
-        return venta;
+    const porProducto = new Map(); // junta los repetidos
+    items.forEach((i, n) => {
+        if (!mongoose.isValidObjectId(i?.producto)) throw errorHttp(400, `Producto ${n + 1} inválido`);
+        const cantidad = Number(i.cantidad);
+        if (!Number.isFinite(cantidad) || cantidad <= 0) throw errorHttp(400, `Producto ${n + 1}: cantidad inválida`);
+        porProducto.set(String(i.producto), (porProducto.get(String(i.producto)) || 0) + cantidad);
     });
-} */
 
-// --- Anular venta ---
-/* export async function posAnularVenta({ ventaId, empresaId }) {
-    return conTransaccion(async (session) => {
-        const venta = await Venta.findOne({ _id: ventaId, empresaId }).session(session);
-        if (!venta) throw new Error("Venta no encontrada");
-
-        // opción 2: una venta PENDIENTE pertenece a una CC, se anula solo desde ahí
-        if (venta.estado === "PENDIENTE") {
-            throw new Error("Esta venta pertenece a una cuenta corriente; anulala desde la cuenta corriente");
-        }
-
-        const items = venta.productos.map(p => ({ producto: p.referencia, cantidad: p.cantidad }));
-        await reponerStockVenta(items, session);
-
-        if (venta.estado === "COMPLETADO" && venta.cajaId) {
-            await revertirFacturacion({ cajaId: venta.cajaId, pagos: venta.pagos, lineas: venta.productos }, session);
-        }
-
-        await marcarVentaAnulada(ventaId, empresaId, session);
-        return venta;
+    if (!Array.isArray(pagos) || pagos.length === 0 || pagos.length > 10) throw errorHttp(400, 'Pagos inválidos');
+    const pagosOk = pagos.map((p, n) => {
+        const monto = Number(p?.monto);
+        if (!TIPOS_PAGO.includes(p?.tipoPago)) throw errorHttp(400, `Pago ${n + 1}: tipo inválido`);
+        if (!Number.isFinite(monto) || monto <= 0) throw errorHttp(400, `Pago ${n + 1}: monto inválido`);
+        return { tipoPago: p.tipoPago, monto };
     });
-} */
 
-// --- Abrir cuenta corriente ---
-/* export async function posAbrirCuentaCorriente({ empresaId, cajaId, cliente, items }) {
-    return conTransaccion(async (session) => {
-        await obtenerCajaAbierta(cajaId, empresaId, session);
+    let monto;
+    if (montoACobrar != null) {
+        monto = Number(montoACobrar);
+        if (!Number.isFinite(monto) || monto <= 0) throw errorHttp(400, 'El monto a cobrar es inválido');
+    }
 
-        const { lineas, subtotalGeneral } = await construirLineasVenta(items, session);
-        await descontarStockVenta(items, session);
+    const nombre = typeof cliente === 'string' ? cliente.trim().slice(0, 80) : '';
 
-        const venta = await crearDocumentoVenta({
-            empresaId, cajaId, cliente, productos: lineas, total: subtotalGeneral,
-            pagos: [], pagoCompleto: false, estado: "PENDIENTE"
-        }, session);
-
-        return ccService.crearCuentaCorriente({ empresaId, cliente, venta }, session);
-    });
+    return {
+        claveIdempotencia,
+        items: [...porProducto].map(([producto, cantidad]) => ({ producto, cantidad })),
+        pagos: pagosOk,
+        montoACobrar: monto,
+        cliente: nombre || undefined,
+    };
 }
 
-export async function posAgregarConsumoCC({ cuentaCorrienteId, empresaId, cajaId, cliente, items }) {
-    return conTransaccion(async (session) => {
-        await obtenerCajaAbierta(cajaId, empresaId, session);
+export async function procesarVenta(empresaId, body) {
+    const datos = normalizarVenta(body);
 
-        const { lineas, subtotalGeneral } = await construirLineasVenta(items, session);
-        await descontarStockVenta(items, session);
+    // Si la operación ya se hizo (reintento tras un timeout), devolvemos la misma venta
+    const previa = await buscarVentaPorClave(empresaId, datos.claveIdempotencia);
+    if (previa) return { venta: previa, repetida: true };
 
-        const venta = await crearDocumentoVenta({
-            empresaId, cajaId, cliente, productos: lineas, total: subtotalGeneral,
-            pagos: [], pagoCompleto: false, estado: "PENDIENTE"
-        }, session);
+    try {
+        const venta = await conTransaccion(async (session) => {
+            const caja = await obtenerCajaAbierta(empresaId, session);
+            if (!caja) throw errorHttp(409, 'No hay una caja abierta');
 
-        return ccService.agregarCargo(cuentaCorrienteId, empresaId, venta, session);
-    });
-} */
+            const { lineas, subtotalGeneral } = await construirLineasVenta(empresaId, datos.items, session);
+            const cobro = calcularCobro({
+                subtotal: subtotalGeneral, montoACobrar: datos.montoACobrar, pagos: datos.pagos,
+            });
 
-// --- Cobrar CC (total o parcial) ---
-/* export async function posCobrarCuentaCorriente({ cuentaCorrienteId, empresaId, cajaId, pagos }) {
-    return conTransaccion(async (session) => {
-        await obtenerCajaAbierta(cajaId, empresaId, session);
+            await descontarStockVenta(datos.items, session);
 
-        const cc = await CuentaCorriente.findOne({ _id: cuentaCorrienteId, empresaId }).session(session);
-        if (!cc) throw new Error("Cuenta corriente no encontrada");
-        if (["SALDADA", "ANULADA"].includes(cc.estado)) throw new Error(`La cuenta está ${cc.estado}`);
+            const nueva = await crearDocumentoVenta({
+                empresaId,
+                cajaId: caja._id,
+                cliente: datos.cliente,
+                productos: lineas,
+                subtotal: subtotalGeneral,
+                descuento: cobro.descuento,
+                recargo: cobro.recargo,
+                total: cobro.total,
+                pagos: cobro.pagos,
+                vuelto: cobro.vuelto,
+                pagoCompleto: true,
+                estado: 'COMPLETADO',
+                claveIdempotencia: datos.claveIdempotencia,
+            }, session);
 
-        const montoPago = pagos.reduce((acc, p) => acc + p.monto, 0);
-        if (montoPago <= 0) throw new Error("El monto a cobrar debe ser mayor a 0");
-        if (montoPago > cc.saldo) throw new Error(`El monto (${montoPago}) supera el saldo pendiente (${cc.saldo})`);
+            await aplicarFacturacion({
+                cajaId: caja._id,
+                pagos: cobro.pagos,
+                lineas: lineasParaFacturar(lineas, cobro.total),
+            }, session);
 
-        const lineasParaFacturar = await ccService.aplicarCobroFIFO(cc, montoPago, session);
-        return ccService.registrarCobro({ cc, cajaId, pagos, lineasParaFacturar }, session);
-    });
-} */
-
-// --- Anular un cargo de CC sin pagos ---
-/* export async function posAnularCargoCC({ cuentaCorrienteId, empresaId, ventaId }) {
-    return conTransaccion(async (session) => {
-        const cc = await CuentaCorriente.findOne({ _id: cuentaCorrienteId, empresaId }).session(session);
-        if (!cc) throw new Error("Cuenta corriente no encontrada");
-
-        const cargo = await ccService.quitarCargo(cc, ventaId);
-
-        const venta = await Venta.findOne({ _id: ventaId, empresaId }).session(session);
-        const items = venta.productos.map(p => ({ producto: p.referencia, cantidad: p.cantidad }));
-        await reponerStockVenta(items, session);
-        await marcarVentaAnulada(ventaId, empresaId, session);
-
-        await cc.save({ session });
-        return { cc, cargoAnulado: cargo };
-    });
-} */
-
-/*! CAJA*/
-/* export async function posAbrirCaja({ empresaId, abiertaPor, efectivoInicial }) {
-    return conTransaccion(async (session) => {
-        try {
-            return await cajaService.crearCajaDoc(
-                { empresaId, fecha: new Date(), abiertaPor, efectivoInicial },
-                session
-            );
-        } catch (err) {
-            if (err.code === 11000) throw new Error("Ya existe una caja abierta para esta empresa");
-            throw err;
+            return nueva;
+        });
+        return { venta, repetida: false };
+    } catch (error) {
+        // Dos pedidos simultáneos con la misma clave: gana uno, el otro devuelve esa venta
+        if (error.code === 11000) {
+            const existente = await buscarVentaPorClave(empresaId, datos.claveIdempotencia);
+            if (existente) return { venta: existente, repetida: true };
         }
-    });
+        throw error;
+    }
 }
-
-export async function posRegistrarIngreso({ empresaId, cajaId, tipo, monto, motivo }) {
-    return conTransaccion(async (session) => {
-        await cajaService.obtenerCajaAbierta(cajaId, empresaId, session);
-        await cajaService.registrarIngreso(cajaId, { tipo, monto, motivo }, session);
-    });
-}
-
-export async function posRegistrarEgreso({ empresaId, cajaId, tipo, monto, motivo }) {
-    return conTransaccion(async (session) => {
-        await cajaService.obtenerCajaAbierta(cajaId, empresaId, session);
-        await cajaService.registrarEgreso(cajaId, { tipo, monto, motivo }, session);
-    });
-}
-
-export async function posRegistrarRetiro({ empresaId, cajaId, monto }) {
-    return conTransaccion(async (session) => {
-        await cajaService.obtenerCajaAbierta(cajaId, empresaId, session);
-        await cajaService.registrarRetiro(cajaId, monto, session);
-    });
-}
-
-export async function posCerrarCaja({ empresaId, cajaId, efectivoFinal, cerradaPor }) {
-    return conTransaccion(async (session) => {
-        const caja = await cajaService.obtenerCajaAbierta(cajaId, empresaId, session);
-
-        // arma el MovimientoStock agregado del día ANTES de cerrar
-        // (agrupa por venta.cajaId: incluye COMPLETADO y PENDIENTE, excluye ANULADO)
-        await cerrarVentasDelDia({ empresaId, cajaId }, session);
-
-        return cajaService.cerrarCajaDoc({ caja, efectivoFinal, cerradaPor }, session);
-    });
-} */
-
-/*! COMPRAS */
-/* export async function posRegistrarCompra({ empresaId, cajaId, proveedor, items, pagos = [] }) {
-    return conTransaccion(async (session) => {
-        await validarProductosCompra(items, session);
-
-        const { lineas, total } = construirLineasCompra(items);
-
-        if (pagos.length) {
-            const sumaPagos = pagos.reduce((acc, p) => acc + p.monto, 0);
-            if (sumaPagos !== total) {
-                throw new Error(`Los pagos (${sumaPagos}) no coinciden con el total (${total})`);
-            }
-            if (cajaId) await cajaService.obtenerCajaAbierta(cajaId, empresaId, session);
-        }
-
-        // 1. documento de compra
-        const compra = await crearDocumentoCompra({
-            empresaId, proveedor, productos: lineas, total,
-            cajaId: cajaId || null, pagos
-        }, session);
-
-        // 2. stock + auditoría, colgado de la compra recién creada
-        await registrarCompra({
-            empresaId,
-            items: items.map(i => ({ producto: i.producto, cantidad: i.cantidad })),
-            origen: { tipo: "COMPRA", referenciaId: compra._id }
-        }, session);
-
-        // 3. actualización opcional de precioCompra
-        await actualizarPrecioCompra(items, session);
-
-        // 4. si se pagó con plata de la caja del día, queda como egreso
-        if (cajaId && pagos.length) {
-            for (const pago of pagos) {
-                await cajaService.registrarEgreso(cajaId, {
-                    tipo: pago.tipoPago,
-                    monto: pago.monto,
-                    motivo: `Compra a proveedor${proveedor?.nombre ? " - " + proveedor.nombre : ""}`
-                }, session);
-            }
-        }
-
-        return compra;
-    });
-} */

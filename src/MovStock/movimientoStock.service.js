@@ -136,7 +136,7 @@ export async function cerrarVentasDelDia({ empresaId, cajaId }, session) {
     const acumulado = new Map();
 
     for (const venta of ventas) {
-        const items = venta.productos.map(p => ({ producto: p.referencia, cantidad: p.cantidad }));
+        const items = venta.productos.map(p => ({ producto: p.producto, cantidad: p.cantidad }));
         const explotados = await explotarItems(items, session);
         for (const { producto, cantidad } of explotados) {
             acumulado.set(producto, (acumulado.get(producto) || 0) + cantidad);
