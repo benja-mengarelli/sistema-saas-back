@@ -95,12 +95,10 @@ export async function cerrarCajaPOS(empresaId, { efectivoContado, cerradaPor }) 
 
 
 /*! VENTAS  */
-function validarClave(c) {
-    if (typeof c !== 'string' || c.length < 8 || c.length > 64) throw errorHttp(400, 'Clave de operación inválida');
-    return c;
-}
+function normalizarVenta(body = {}) {
+    const { claveIdempotencia, items, pagos, montoACobrar, cliente } = body;
 
-function normalizarItems(items) {
+    if (typeof claveIdempotencia !== 'string' || claveIdempotencia.length < 8 || claveIdempotencia.length > 64) throw errorHttp(400, 'Clave de operación inválida');
     if (!Array.isArray(items) || items.length === 0) throw errorHttp(400, 'Hace falta al menos un producto');
     if (items.length > 100) throw errorHttp(400, 'Demasiados productos en una sola operación');
     const porProducto = new Map();
@@ -110,16 +108,6 @@ function normalizarItems(items) {
         if (!Number.isFinite(cantidad) || cantidad <= 0) throw errorHttp(400, `Producto ${n + 1}: cantidad inválida`);
         porProducto.set(String(i.producto), (porProducto.get(String(i.producto)) || 0) + cantidad);
     });
-    return [...porProducto].map(([producto, cantidad]) => ({ producto, cantidad }));
-}
-
-
-
-function normalizarVenta(body = {}) {
-    const { claveIdempotencia, items, pagos, montoACobrar, cliente } = body;
-
-    claveIdempotencia = validarClave(claveIdempotencia)
-    items = normalizarItems(items)
 
     if (!Array.isArray(pagos) || pagos.length === 0 || pagos.length > 10) throw errorHttp(400, 'Pagos inválidos');
     const pagosOk = pagos.map((p, n) => {
