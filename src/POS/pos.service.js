@@ -7,12 +7,12 @@ import {
     crearDocumentoCompra, actualizarPrecioCompra,
 } from '../Compras/compra.service.js';
 import { obtenerCajaAbierta, cerrarCaja, calcularResumen } from '../Caja/caja.service.js';
-import { descontarStockVenta } from '../Productos/product.service.js'; 
+import { descontarStockVenta, reponerStockVenta } from '../Productos/product.service.js'; 
 import {
     buscarVentaPorClave, construirLineasVenta, calcularCobro,
     lineasParaFacturar, crearDocumentoVenta, obtenerVentaPorId, marcarVentaAnulada, listarVentasDeCaja
 } from '../Ventas/venta.service.js'; 
-import { aplicarFacturacion } from '../helper/facturacionCaja.service.js';
+import { aplicarFacturacion, revertirFacturacion } from '../helper/facturacionCaja.service.js';
 import { crearCC, obtenerCCAbierta, obtenerCCPorId, agregarCargo, agregarPago, ventasDeCargos, unificarProductos, liquidarVentas, cerrarCC } from '../CtaCorriente/cuentaCorriente.service.js';
 
 
