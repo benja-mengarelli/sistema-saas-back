@@ -2,6 +2,7 @@ import { obtenerCajaAbierta, calcularResumen, abrirCaja } from './caja.service.j
 import { cerrarCajaPOS } from '../POS/pos.service.js';
 import { responderError } from '../utils/errores.js';
 import { procesarVenta } from '../POS/pos.service.js';
+import { manejar } from '../helper/manejar.js';
 
 export const getCajaActual = async (req, res) => {
     try {
@@ -24,12 +25,12 @@ export const postAbrirCaja = async (req, res) => {
 export const postCerrarCaja = async (req, res) => {
     try {
         res.json(await cerrarCajaPOS(req.params.empresaId, {
-            efectivoContado: req.body?.efectivoContado,
+            efectivoEnCaja: req.body?.efectivoEnCaja,
+            efectivoRetirado: req.body?.efectivoRetirado,
             cerradaPor: req.user.uid,
         }));
     } catch (error) { responderError(res, error); }
 };
-
 
 
 export const postVenta = async (req, res) => {
@@ -38,3 +39,9 @@ export const postVenta = async (req, res) => {
         res.status(repetida ? 200 : 201).json(venta);
     } catch (error) { responderError(res, error); }
 };
+
+export const getCajas = manejar(async (req, res) =>
+    res.json(await listarCajas(req.params.empresaId)));
+
+export const getDetalleCaja = manejar(async (req, res) =>
+    res.json(await detalleCaja(req.params.empresaId, req.params.cajaId)));

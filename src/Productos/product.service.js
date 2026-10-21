@@ -116,7 +116,7 @@ export async function descontarStockVenta(items, session) {
         const actualizado = await Product.findOneAndUpdate(
             { _id: producto, stock: { $gte: cantidad } },
             { $inc: { stock: -cantidad } },
-            { session, new: true }
+            { session, returnDocument: 'after' }
         );
         if (!actualizado) {
             const p = await Product.findById(producto).select('nombre stock').session(session);

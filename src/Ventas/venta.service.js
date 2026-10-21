@@ -6,25 +6,25 @@ const redondear2 = (n) => Math.round(n * 100) / 100;
 const aCentavos = (n) => Math.round(n * 100);
 const deCentavos = (c) => c / 100;
 
-export const getVentas = async (empresaId) => {
-    try {
-        return await Venta.find({ empresaId })
-            .sort({ createdAt: -1 })
-            .populate("cajaId");
-    } catch (error) {
-        console.error("Error al obtener ventas:", error);
-        throw new Error("Error al obtener ventas");
-    }
-};
+export async function obtenerVentaPorId(empresaId, ventaId, session) {
+    return Venta.findOne({ _id: ventaId, empresaId }).session(session ?? null);
+}
 
-export const getVentaById = async (empresaId, ventaId) => {
-    try {
-        return await Venta.findOne({ _id: ventaId, empresaId }).populate("cajaId");
-    } catch (error) {
-        console.error("Error al obtener venta:", error);
-        throw new Error("Error al obtener venta");
-    }
-};
+// Atómica: solo anula si sigue COMPLETADO y no es de cuenta corriente
+export async function marcarVentaAnulada(empresaId, ventaId, anuladaPor, session) {
+    return Venta.findOneAndUpdate(
+        { _id: ventaId, empresaId, estado: 'COMPLETADO', cuentaCorrienteId: null },
+        { $set: { estado: 'ANULADO', anulacion: { fecha: new Date(), por: anuladaPor } } },
+        { session, returnDocument: 'after' }
+    );
+}
+
+export async function listarVentasDeCaja(empresaId, cajaId) {
+    return Venta.find({ empresaId, cajaId, estado: { $in: ['COMPLETADO', 'ANULADO'] } })
+        .select('cliente productos pagos total vuelto descuento recargo estado cuentaCorrienteId createdAt')
+        .sort({ createdAt: -1 })
+        .lean();
+}
 
 export const buscarVentaPorClave = (empresaId, claveIdempotencia) =>
     Venta.findOne({ empresaId, claveIdempotencia });
@@ -98,14 +98,5 @@ export function lineasParaFacturar(lineas, total) {
 
 export async function crearDocumentoVenta(data, session) {
     const [venta] = await Venta.create([data], { session });
-    return venta;
-}
-
-export async function marcarVentaAnulada(ventaId, empresaId, session) {
-    const venta = await Venta.findOne({ _id: ventaId, empresaId }).session(session);
-    if (!venta) throw new Error("Venta no encontrada");
-    if (venta.estado === "ANULADO") throw new Error("La venta ya está anulada");
-    venta.estado = "ANULADO";
-    await venta.save({ session });
     return venta;
 }

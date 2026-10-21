@@ -35,7 +35,8 @@ const ventaSchema = new mongoose.Schema({
 
     recargo: { type: Number, default: 0 },
 
-    estado: { type: String, enum: ["COMPLETADO", "PENDIENTE", "ANULADO"], default: "COMPLETADO" }
+    estado: { type: String, enum: ["COMPLETADO", "PENDIENTE", "ANULADO"], default: "COMPLETADO" },
+    anulacion: { fecha: Date, por: String },
 }, {
     timestamps: true
 });

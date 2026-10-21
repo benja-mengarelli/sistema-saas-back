@@ -10,7 +10,7 @@ import { obtenerCajaAbierta, cerrarCaja, calcularResumen } from '../Caja/caja.se
 import { descontarStockVenta } from '../Productos/product.service.js'; 
 import {
     buscarVentaPorClave, construirLineasVenta, calcularCobro,
-    lineasParaFacturar, crearDocumentoVenta,
+    lineasParaFacturar, crearDocumentoVenta, obtenerVentaPorId, marcarVentaAnulada, listarVentasDeCaja
 } from '../Ventas/venta.service.js'; 
 import { aplicarFacturacion } from '../helper/facturacionCaja.service.js';
 import { crearCC, obtenerCCAbierta, obtenerCCPorId, agregarCargo, agregarPago, ventasDeCargos, unificarProductos, liquidarVentas, cerrarCC } from '../CtaCorriente/cuentaCorriente.service.js';
@@ -78,8 +78,8 @@ export async function procesarCompra(empresaId, body) {
     });
 }
 
-export async function cerrarCajaPOS(empresaId, { efectivoContado, cerradaPor }) {
-    if (typeof efectivoContado !== 'number' || !Number.isFinite(efectivoContado) || efectivoContado < 0) {
+export async function cerrarCajaPOS(empresaId, { efectivoEnCaja, efectivoRetirado, cerradaPor }) {
+    if (typeof efectivoRetirado !== 'number' || !Number.isFinite(efectivoRetirado) || efectivoRetirado < 0) {
         throw errorHttp(400, 'El efectivo contado debe ser un número mayor o igual a 0');
     }
 
@@ -88,7 +88,7 @@ export async function cerrarCajaPOS(empresaId, { efectivoContado, cerradaPor }) 
         if (!caja) throw errorHttp(404, 'No hay una caja abierta');
 
         await cerrarVentasDelDia({ empresaId, cajaId: caja._id }, session); // movimiento de stock agrupado
-        const cerrada = await cerrarCaja({ caja, efectivoContado, cerradaPor }, session);
+        const cerrada = await cerrarCaja({ caja, efectivoEnCaja, efectivoRetirado, cerradaPor }, session);
 
         return { caja: cerrada, resumen: calcularResumen(cerrada) };
     });
@@ -364,4 +364,41 @@ export async function finalizarCC(empresaId, cuentaId, body = {}) {
         }
         throw error;
     }
+}
+
+/* PAG VENTAS */
+export async function ventasDeCajaAbierta(empresaId) {
+    const caja = await obtenerCajaAbierta(empresaId); // la misma que usa procesarVenta
+    if (!caja) return [];
+    return listarVentasDeCaja(empresaId, caja._id);
+}
+
+export async function anularVenta(empresaId, ventaId, anuladaPor) {
+    if (!mongoose.isValidObjectId(ventaId)) throw errorHttp(400, 'Venta inválida');
+
+    return conTransaccion(async (session) => {
+        const venta = await marcarVentaAnulada(empresaId, ventaId, anuladaPor, session);
+
+        if (!venta) {
+            const actual = await obtenerVentaPorId(empresaId, ventaId, session);
+            if (!actual) throw errorHttp(404, 'La venta no existe');
+            if (actual.estado === 'ANULADO') return { venta: actual, repetida: true };
+            if (actual.cuentaCorrienteId) throw errorHttp(409, 'Las ventas de cuenta corriente no se anulan desde acá');
+            throw errorHttp(409, 'Esta venta no se puede anular');
+        }
+
+        // Falla con 409 si la caja de la venta ya no está abierta, y la transacción entera se revierte
+        await revertirFacturacion({
+            cajaId: venta.cajaId,
+            pagos: venta.pagos,
+            lineas: lineasParaFacturar(venta.productos, venta.total),
+        }, session);
+
+        await reponerStockVenta(
+            venta.productos.map((p) => ({ producto: p.producto, cantidad: p.cantidad })),
+            session
+        );
+
+        return { venta, repetida: false };
+    });
 }
