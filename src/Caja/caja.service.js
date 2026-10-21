@@ -97,7 +97,7 @@ export async function detalleCaja(empresaId, cajaId) {
     const caja = await Caja.findOne({ _id: cajaId, empresaId }).lean();
     if (!caja) throw errorHttp(404, 'La caja no existe');
 
-    const filtro = { empresaId, cajaId: caja._id, estado: 'COMPLETADO' };
+    const filtro = { empresaId, cajaId: caja._id };
 
     const [lineas, [resumen]] = await Promise.all([
         Venta.aggregate([
