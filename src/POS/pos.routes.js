@@ -16,9 +16,9 @@ router.get('/:empresaId/cuentas-corrientes/:cuentaId', requireAuth, requireEmpre
 router.post('/:empresaId/cuentas-corrientes/cargos', requireAuth, requireEmpresa(), postCargoCC);
 router.post('/:empresaId/cuentas-corrientes/:cuentaId/pagos', requireAuth, requireEmpresa(), postPagoCC);
 router.post('/:empresaId/cuentas-corrientes/:cuentaId/finalizar', requireAuth, requireEmpresa(), postFinalizarCC);
-router.get('/:empresaId/cajas',          requireAuth, requireEmpresa(), getCajas);
-router.get('/:empresaId/cajas/:cajaId',  requireAuth, requireEmpresa(), getDetalleCaja);
-router.get ('/:empresaId/ventas',                 requireAuth, requireEmpresa(), getVentas);
+router.get('/:empresaId/cajas', requireAuth, requireEmpresa(), getCajas);
+router.get('/:empresaId/cajas/:cajaId', requireAuth, requireEmpresa(), getDetalleCaja);
+router.get('/:empresaId/ventas', requireAuth, requireEmpresa(), getVentas);
 router.post('/:empresaId/ventas/:ventaId/anular', requireAuth, requireEmpresa(), postAnularVenta);
 
 
