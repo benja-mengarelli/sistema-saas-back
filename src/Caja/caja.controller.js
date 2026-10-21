@@ -1,4 +1,4 @@
-import { obtenerCajaAbierta, calcularResumen, abrirCaja } from './caja.service.js'; 
+import { obtenerCajaAbierta, calcularResumen, abrirCaja, listarCajas, detalleCaja } from './caja.service.js'; 
 import { cerrarCajaPOS } from '../POS/pos.service.js';
 import { responderError } from '../utils/errores.js';
 import { procesarVenta } from '../POS/pos.service.js';
