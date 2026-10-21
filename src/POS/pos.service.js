@@ -367,6 +367,10 @@ export async function finalizarCC(empresaId, cuentaId, body = {}) {
 }
 
 /* PAG VENTAS */
+export async function ventasDeCaja(empresaId, cajaId) {
+    return listarVentasDeCaja(empresaId, cajaId);
+}
+
 export async function ventasDeCajaAbierta(empresaId) {
     const caja = await obtenerCajaAbierta(empresaId); // la misma que usa procesarVenta
     if (!caja) return [];
